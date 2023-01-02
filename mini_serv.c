@@ -7,9 +7,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-int	fatal_error(void)
+void	ft_error(char* str)
 {
-	fprintf(stderr, "Fatal error\n");
+	write(2, str, strlen(str));
 	exit(1);
 }
 
@@ -28,7 +28,7 @@ int extract_message(char **buf, char **msg)
 		{
 			newbuf = calloc(1, sizeof(*newbuf) * (strlen(*buf + i + 1) + 1));
 			if (newbuf == 0)
-				return (-1);
+				ft_error("Fatal error\n");
 			strcpy(newbuf, *buf + i + 1);
 			*msg = *buf;
 			(*msg)[i + 1] = 0;
@@ -51,7 +51,7 @@ char *str_join(char *buf, char *add)
 		len = strlen(buf);
 	newbuf = malloc(sizeof(*newbuf) * (len + strlen(add) + 1));
 	if (newbuf == 0)
-		return (0);
+		ft_error("Fatal error\n");
 	newbuf[0] = 0;
 	if (buf != 0)
 		strcat(newbuf, buf);
@@ -60,24 +60,19 @@ char *str_join(char *buf, char *add)
 	return (newbuf);
 }
 
-
 int main(int ac, char** av) {
+
+	fd_set rfds;
+	fd_set tempfds;
+	if (ac < 2)
+		ft_error("Wrong number of arguments\n");
 	int sockfd, connfd, len;
 	struct sockaddr_in servaddr, cli; 
 
-	if (ac < 2)
-	{
-		fprintf(stderr, "Wrong number of arguments\n");
-		exit(1);
-	}
 	// socket create and verification 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0); 
-	if (sockfd == -1) { 
-		printf("socket creation failed...\n"); 
-		exit(0); 
-	} 
-	else
-		printf("Socket successfully created..\n"); 
+	if (sockfd == -1)
+		ft_error("Fatal error\n");
 	bzero(&servaddr, sizeof(servaddr)); 
 
 	// assign IP, PORT 
@@ -86,22 +81,18 @@ int main(int ac, char** av) {
 	servaddr.sin_port = htons(atoi(av[1])); 
   
 	// Binding newly created socket to given IP and verification 
-	if ((bind(sockfd, (const struct sockaddr *)&servaddr, sizeof(servaddr))) != 0) { 
-		printf("socket bind failed...\n"); 
-		exit(0); 
-	} 
-	else
-		printf("Socket successfully binded..\n");
-	if (listen(sockfd, 10) != 0) {
-		printf("cannot listen\n"); 
-		exit(0); 
+	if ((bind(sockfd, (const struct sockaddr *)&servaddr, sizeof(servaddr))) != 0)
+		ft_error("Fatal error\n");
+	if (listen(sockfd, 10) != 0)
+		ft_error("Fatal error\n");
+	FD_SET(sockfd, &rfds);
+	while (1)
+	{
+		tempfds = rfds;
+		len = sizeof(cli);
+		connfd = accept(sockfd, (struct sockaddr *)&cli, &len);
+		if (connfd < 0)
+			ft_error("Fatal error\n");
+		printf("server acccept the client...\n");
 	}
-	len = sizeof(cli);
-	connfd = accept(sockfd, (struct sockaddr *)&cli, &len);
-	if (connfd < 0) { 
-        printf("server acccept failed...\n"); 
-        exit(0); 
-    } 
-    else
-        printf("server acccept the client...\n");
 }
