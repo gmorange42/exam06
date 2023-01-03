@@ -13,6 +13,21 @@ void	ft_error(char* str)
 	exit(1);
 }
 
+void	send_to_clients(int sender, int sockfd, int fdmax, fd_set* rfds, char* info, char* message)
+{
+	for (int i = sockfd + 1; i <= fdmax; ++i)
+	{
+		if (i != sender)
+		{
+			if (FD_ISSET(i, rfds))
+			{
+				send(i, info, strlen(info), 0);
+				send(i, message, strlen(message), 0);
+			}
+		}
+	}
+}
+
 int extract_message(char **buf, char **msg)
 {
 	char	*newbuf;
@@ -28,7 +43,7 @@ int extract_message(char **buf, char **msg)
 		{
 			newbuf = calloc(1, sizeof(*newbuf) * (strlen(*buf + i + 1) + 1));
 			if (newbuf == 0)
-				ft_error("Fatal error\n");
+				return (-1);
 			strcpy(newbuf, *buf + i + 1);
 			*msg = *buf;
 			(*msg)[i + 1] = 0;
@@ -37,33 +52,19 @@ int extract_message(char **buf, char **msg)
 		}
 		i++;
 	}
+	*msg = *buf;
+	*buf = NULL;
 	return (0);
-}
-
-char *str_join(char *buf, char *add)
-{
-	char	*newbuf;
-	int		len;
-
-	if (buf == 0)
-		len = 0;
-	else
-		len = strlen(buf);
-	newbuf = malloc(sizeof(*newbuf) * (len + strlen(add) + 1));
-	if (newbuf == 0)
-		ft_error("Fatal error\n");
-	newbuf[0] = 0;
-	if (buf != 0)
-		strcat(newbuf, buf);
-	free(buf);
-	strcat(newbuf, add);
-	return (newbuf);
 }
 
 int main(int ac, char** av) {
 
 	fd_set rfds;
 	fd_set tempfds;
+	char	buf[2000000];
+	char	prefixe[50];
+	char*	buffer;
+	char*	msg;
 	if (ac < 2)
 		ft_error("Wrong number of arguments\n");
 	int sockfd, connfd, len;
@@ -86,13 +87,65 @@ int main(int ac, char** av) {
 	if (listen(sockfd, 10) != 0)
 		ft_error("Fatal error\n");
 	FD_SET(sockfd, &rfds);
+	int	fdmax = sockfd;
 	while (1)
 	{
+		buffer = NULL;
+		msg = NULL;
+		bzero(&buf, sizeof(buf));
+		bzero(&prefixe, sizeof(prefixe));
 		tempfds = rfds;
-		len = sizeof(cli);
-		connfd = accept(sockfd, (struct sockaddr *)&cli, &len);
-		if (connfd < 0)
+		if (select(fdmax + 1, &tempfds, NULL, NULL, NULL) == -1)
 			ft_error("Fatal error\n");
-		printf("server acccept the client...\n");
+		for (int i = sockfd; i <= fdmax; ++i)
+		{
+			if (FD_ISSET(i, &tempfds) == 0)
+				continue;
+			if (i == sockfd)
+			{
+				puts("In \"new connect\"");
+				len = sizeof(cli);
+				connfd = accept(sockfd, (struct sockaddr *)&cli, &len);
+				if (connfd < 0)
+					ft_error("Fatal error\n");
+				FD_SET(connfd, &rfds);
+				sprintf(prefixe, "server: client %d just arrived\n", connfd - sockfd - 1);
+				send_to_clients(connfd, sockfd, fdmax, &rfds, (char*)prefixe, "");
+				++fdmax;
+				break;
+			}
+			else
+			{
+				puts("In \"ELSE\"");
+				ssize_t size;
+				size = recv(i, buf, sizeof(buf), 0);
+				if (size == -1)
+					ft_error("Fatal error\n");
+				if (size == 0)
+				{
+					FD_CLR(i, &rfds);
+					sprintf(prefixe, "server: client %d just left\n", i - sockfd - 1);
+					send_to_clients(i, sockfd, fdmax, &rfds, (char*)prefixe, "");
+				}
+				else
+				{
+					buffer = malloc(sizeof(char) * (strlen(buf) + 1));
+					if (buffer == 0)
+						ft_error("Fatal error\n");
+					strcpy(buffer, buf);
+
+					while(extract_message(&buffer, &msg) == 1)
+					{
+						printf("MSG = %s\n", msg);
+						sprintf(prefixe, "client %d: ", i - sockfd - 1);
+						send_to_clients(i, sockfd, fdmax, &rfds, (char*)prefixe, msg);
+						free(msg);
+						msg = NULL;
+					}
+					free(buffer);
+					buffer = NULL;
+				}
+			}
+		}
 	}
 }

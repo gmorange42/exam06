@@ -1,35 +1,56 @@
-       #include <stdio.h>
-       #include <stdlib.h>
-       #include <sys/select.h>
+#include <errno.h>
+#include <string.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <stdlib.h>
+#include <stdio.h>
 
-       int
-       main(void)
+int extract_message(char **buf, char **msg)
+{
+	char	*newbuf;
+	int	i;
+
+	*msg = 0;
+	if (*buf == 0)
+		return (0);
+	i = 0;
+	while ((*buf)[i])
+	{
+		if ((*buf)[i] == '\n')
+		{
+			newbuf = calloc(1, sizeof(*newbuf) * (strlen(*buf + i + 1) + 1));
+			if (newbuf == 0)
+				return (-1);
+			strcpy(newbuf, *buf + i + 1);
+			*msg = *buf;
+			(*msg)[i + 1] = 0;
+			*buf = newbuf;
+			return (1);
+		}
+		i++;
+	}
+	*msg = *buf;
+	*buf = NULL;
+	return (1);
+}
+
+int	main(void)
        {
-           fd_set rfds;
-           struct timeval tv;
-           int retval;
+	       char *buf = NULL;
+	       char *msg = NULL;
 
-           /* Watch stdin (fd 0) to see when it has input. */
+	       buf = strdup("hello, je suis un test\npouet haha\na");
+	       printf("[buf => %s]", buf);
+	       printf("[msg => %s\n]", msg);
 
-           FD_ZERO(&rfds);
-           FD_SET(0, &rfds);
-
-           /* Wait up to five seconds. */
-
-           tv.tv_sec = 5;
-           tv.tv_usec = 0;
-
-           retval = select(1, &rfds, NULL, NULL, &tv);
-           /* Don't rely on the value of tv now! */
-
-           if (retval == -1)
-               perror("select()");
-           else if (retval)
-               printf("Data is available now.\n");
-               /* FD_ISSET(0, &rfds) will be true. */
-           else
-               printf("No data within five seconds.\n");
-
-           exit(EXIT_SUCCESS);
+	       while (extract_message(&buf, &msg) == 1)
+	       {
+		       printf("[buf => %s]", buf);
+		       printf("[msg => %s\n]", msg);
+		       free(msg);
+	       }
+	       exit(EXIT_SUCCESS);
        }
 
