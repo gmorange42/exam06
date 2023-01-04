@@ -125,7 +125,8 @@ int	main(int ac, char** av)
 				if (connfd > fdmax)
 					fdmax = connfd;
 				clients[connfd].id = idmax++;
-				clients[connfd].msg = calloc(1, sizeof(char) * 2);
+				clients[connfd].msg = NULL;
+//				clients[connfd].msg = calloc(1, sizeof(char) * 2);
 				char	str[50];
 				sprintf(str, "server: client %d just arrived\n", clients[connfd].id);
 				send_to_all(&fds, fdmax, sockfd, connfd, str);
@@ -133,6 +134,9 @@ int	main(int ac, char** av)
 			}
 			else 
 			{
+				if (clients[i].msg == NULL)
+					clients[i].msg = calloc(1, sizeof(char) * 2);
+
 				int	ret;
 				char*	buf;
 				buf = calloc(1, sizeof(char) * 2);
@@ -143,7 +147,7 @@ int	main(int ac, char** av)
 					sprintf(str, "server: client %d just left\n", clients[i].id);
 					send_to_all(&fds, fdmax, sockfd, i, str);
 					FD_CLR(i, &fds);
-					free(clients[i].msg);
+//					free(clients[i].msg);
 					close(i);
 				}
 				else
@@ -159,7 +163,8 @@ int	main(int ac, char** av)
 						clients[i].msg = str_join(clients[i].msg, msg);
 						send_to_all(&fds, fdmax, sockfd, i, clients[i].msg);
 						free(clients[i].msg);
-						clients[i].msg = calloc(1, sizeof(char) * 2);
+						clients[i].msg = NULL;
+//						clients[i].msg = calloc(1, sizeof(char) * 2);
 					}
 					free(msg);
 					msg = NULL;
