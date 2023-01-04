@@ -7,24 +7,24 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+typedef struct	s_client
+{
+	int	id;
+	char*	msg;
+}		t_client;
+
 void	ft_error(char* str)
 {
 	write(2, str, strlen(str));
 	exit(1);
 }
 
-void	send_to_clients(int sender, int sockfd, int fdmax, fd_set* rfds, char* info, char* message)
+void	send_to_all(fd_set* fds, int fdmax, int serv, int sender, char* message)
 {
-	for (int i = sockfd + 1; i <= fdmax; ++i)
+	for(int i = 3; i <= fdmax; ++i)
 	{
-		if (i != sender)
-		{
-			if (FD_ISSET(i, rfds))
-			{
-				send(i, info, strlen(info), 0);
-				send(i, message, strlen(message), 0);
-			}
-		}
+		if (i != sender && i != serv && FD_ISSET(i, fds))
+			send(i, message, strlen(message), 0);
 	}
 }
 
@@ -52,100 +52,120 @@ int extract_message(char **buf, char **msg)
 		}
 		i++;
 	}
-	*msg = *buf;
-	*buf = NULL;
 	return (0);
 }
 
-int main(int ac, char** av) {
+char *str_join(char *buf, char *add)
+{
+	char	*newbuf;
+	int		len;
 
-	fd_set rfds;
-	fd_set tempfds;
-	char	buf[2000000];
-	char	prefixe[50];
-	char*	buffer;
-	char*	msg;
+	if (buf == 0)
+		len = 0;
+	else
+		len = strlen(buf);
+	newbuf = malloc(sizeof(*newbuf) * (len + strlen(add) + 1));
+	if (newbuf == 0)
+		return (0);
+	newbuf[0] = 0;
+	if (buf != 0)
+		strcat(newbuf, buf);
+	free(buf);
+	strcat(newbuf, add);
+	return (newbuf);
+}
+
+int	main(int ac, char** av)
+{
+	int	nb_clients = 0;
+	int	idmax = 0;
+	t_client	clients[10000];
+	int	fdmax;
+	fd_set	fds;
+	fd_set	fds_copy;
 	if (ac < 2)
 		ft_error("Wrong number of arguments\n");
+
 	int sockfd, connfd, len;
 	struct sockaddr_in servaddr, cli; 
 
-	// socket create and verification 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0); 
 	if (sockfd == -1)
 		ft_error("Fatal error\n");
 	bzero(&servaddr, sizeof(servaddr)); 
 
-	// assign IP, PORT 
 	servaddr.sin_family = AF_INET; 
-	servaddr.sin_addr.s_addr = htonl(2130706433); //127.0.0.1
+	servaddr.sin_addr.s_addr = htonl(2130706433);
 	servaddr.sin_port = htons(atoi(av[1])); 
-  
-	// Binding newly created socket to given IP and verification 
+
 	if ((bind(sockfd, (const struct sockaddr *)&servaddr, sizeof(servaddr))) != 0)
 		ft_error("Fatal error\n");
 	if (listen(sockfd, 10) != 0)
 		ft_error("Fatal error\n");
-	FD_SET(sockfd, &rfds);
-	int	fdmax = sockfd;
+
+	fdmax = sockfd;
+	FD_SET(sockfd, &fds);
 	while (1)
 	{
-		buffer = NULL;
-		msg = NULL;
-		bzero(&buf, sizeof(buf));
-		bzero(&prefixe, sizeof(prefixe));
-		tempfds = rfds;
-		if (select(fdmax + 1, &tempfds, NULL, NULL, NULL) == -1)
+		fds_copy = fds;
+		if (select(fdmax + 1, &fds_copy, NULL, NULL, NULL) == -1)
 			ft_error("Fatal error\n");
-		for (int i = sockfd; i <= fdmax; ++i)
+
+		for (int i = 3; i <= fdmax; ++i)
 		{
-			if (FD_ISSET(i, &tempfds) == 0)
+			if (FD_ISSET(i, &fds_copy) == 0)
 				continue;
 			if (i == sockfd)
 			{
-				puts("In \"new connect\"");
 				len = sizeof(cli);
 				connfd = accept(sockfd, (struct sockaddr *)&cli, &len);
 				if (connfd < 0)
 					ft_error("Fatal error\n");
-				FD_SET(connfd, &rfds);
-				sprintf(prefixe, "server: client %d just arrived\n", connfd - sockfd - 1);
-				send_to_clients(connfd, sockfd, fdmax, &rfds, (char*)prefixe, "");
-				++fdmax;
+				FD_SET(connfd, &fds);
+				if (connfd > fdmax)
+					fdmax = connfd;
+				clients[connfd].id = idmax++;
+				clients[connfd].msg = calloc(1, sizeof(char) * 2);
+				char	str[50];
+				sprintf(str, "server: client %d just arrived\n", clients[connfd].id);
+				send_to_all(&fds, fdmax, sockfd, connfd, str);
 				break;
 			}
-			else
+			else 
 			{
-				puts("In \"ELSE\"");
-				ssize_t size;
-				size = recv(i, buf, sizeof(buf), 0);
-				if (size == -1)
-					ft_error("Fatal error\n");
-				if (size == 0)
+				int	ret;
+				char*	buf;
+				buf = calloc(1, sizeof(char) * 2);
+				ret = recv(i, buf, 1, 0);
+				if (ret <= 0)
 				{
-					FD_CLR(i, &rfds);
-					sprintf(prefixe, "server: client %d just left\n", i - sockfd - 1);
-					send_to_clients(i, sockfd, fdmax, &rfds, (char*)prefixe, "");
+					char	str[50];
+					sprintf(str, "server: client %d just left\n", clients[i].id);
+					send_to_all(&fds, fdmax, sockfd, i, str);
+					FD_CLR(i, &fds);
+					close(i);
 				}
 				else
 				{
-					buffer = malloc(sizeof(char) * (strlen(buf) + 1));
-					if (buffer == 0)
-						ft_error("Fatal error\n");
-					strcpy(buffer, buf);
-
-					while(extract_message(&buffer, &msg) == 1)
+					char*	msg;
+					if (extract_message(&buf, &msg) == 0)
+						clients[i].msg = str_join(clients[i].msg, buf);
+					else
 					{
-						printf("MSG = %s\n", msg);
-						sprintf(prefixe, "client %d: ", i - sockfd - 1);
-						send_to_clients(i, sockfd, fdmax, &rfds, (char*)prefixe, msg);
-						free(msg);
-						msg = NULL;
+						char	str[50];
+						sprintf(str, "client %d: ", clients[i].id);
+						send_to_all(&fds, fdmax, sockfd, i, str);
+						clients[i].msg = str_join(clients[i].msg, msg);
+						send_to_all(&fds, fdmax, sockfd, i, clients[i].msg);
+						free(clients[i].msg);
+						clients[i].msg = calloc(1, sizeof(char) * 2);
 					}
-					free(buffer);
-					buffer = NULL;
+					free(msg);
+					msg = NULL;
 				}
-			}
+				free(buf);
+				buf = NULL;
+			}	
 		}
 	}
 }

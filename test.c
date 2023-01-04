@@ -51,6 +51,7 @@ int	main(void)
 		       printf("[msg => %s\n]", msg);
 		       free(msg);
 	       }
+	       printf("TEST LINE %d\n", __LINE__);
 	       exit(EXIT_SUCCESS);
        }
 
