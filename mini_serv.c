@@ -143,6 +143,7 @@ int	main(int ac, char** av)
 					sprintf(str, "server: client %d just left\n", clients[i].id);
 					send_to_all(&fds, fdmax, sockfd, i, str);
 					FD_CLR(i, &fds);
+					free(clients[i].msg);
 					close(i);
 				}
 				else
