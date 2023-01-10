@@ -19,25 +19,12 @@ void	ft_error(char* str)
 	exit(1);
 }
 
-void	send_to_chan(int sender, int sender_id, int sockfd, int fdmax, int mode, fd_set* fds, char* msg)
+void	send_to_all(int sender, int sockfd, int fdmax, fd_set* fds, char* str)
 {
-	char	prefixe[64];
-
-	if (mode == 1)
-		sprintf(prefixe, "server: client %d just arrived\n", sender_id);
-	if (mode == 2)
-		sprintf(prefixe, "client %d: ", sender_id);
-	if (mode == 3)
-		sprintf(prefixe, "server: client %d just left\n", sender_id);
-
 	for (int i = 0; i <= fdmax; ++i)
 	{
-		if (i != sender && i != sockfd && FD_ISSET(i, fds) != 0)
-		{
-			send(i, prefixe, strlen(prefixe), 0);
-			if (strlen(msg) > 0)
-				send(i, msg, strlen(msg), 0);
-		}
+		if (i != sender && i != sockfd && FD_ISSET(i, fds))
+			send(i, str, strlen(str), 0);
 	}
 }
 
@@ -95,7 +82,7 @@ int main(int ac, char** av) {
 	int sockfd, connfd;
 	socklen_t	len;
 	struct sockaddr_in servaddr, cli; 
-	int	fdmax;
+	int	fdmax = 0;
 	int	id_client = 0;
 	fd_set	fds;
 	fd_set	fds_copy;
@@ -117,10 +104,10 @@ int main(int ac, char** av) {
 		ft_error("Fatal error\n");
 	if (listen(sockfd, 10) != 0)
 		ft_error("Fatal error\n");
+	fdmax = sockfd;
 	FD_ZERO(&fds);
 	FD_SET(sockfd, &fds);
-	fdmax = sockfd;
-	while (1)
+	while(1)
 	{
 		fds_copy = fds;
 		if (select(fdmax + 1, &fds_copy, NULL, NULL, NULL) == -1)
@@ -135,42 +122,15 @@ int main(int ac, char** av) {
 				connfd = accept(sockfd, (struct sockaddr *)&cli, &len);
 				if (connfd < 0)
 					ft_error("Fatal error\n");
-				if (fdmax < connfd)
+				if (connfd > fdmax)
 					fdmax = connfd;
+				FD_SET(connfd, &fds);
 				clients[connfd].id = id_client++;
 				clients[connfd].msg = NULL;
-				FD_SET(connfd, &fds);
-				send_to_chan(connfd, clients[connfd].id, sockfd, fdmax, 1, &fds, "");
+				char	str[50];
+				sprintf(str, "server: client %d just arrived\n", clients[connfd].id);
+				send_to_all(connfd, sockfd, fdmax, &fds, str);
 				break;
-			}
-			else
-			{
-				char	buf[32];
-				bzero(&buf, sizeof(char) * 32);
-				if (recv(i, buf, 31, 0) < 1)
-				{
-					FD_CLR(i, &fds);
-					send_to_chan(i, clients[i].id, sockfd, fdmax, 3, &fds, "");
-					close(i);
-				}
-				else
-				{
-					char*	msg;
-					clients[i].msg = str_join(clients[i].msg, buf);
-					while(extract_message(&clients[i].msg, &msg) == 1)
-					{
-						send_to_chan(i, clients[i].id, sockfd, fdmax, 2, &fds, msg);
-						free(msg);
-						msg = NULL;
-					}
-					free(msg);
-					msg = NULL;
-					if (strlen(clients[i].msg) == 0)
-					{
-						free(clients[i].msg);
-						clients[i].msg= NULL;
-					}
-				}
 			}
 		}
 	}

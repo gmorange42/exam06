@@ -19,10 +19,9 @@ void	ft_error(char* str)
 	exit(1);
 }
 
-void	send_to_chan(int sender, int sender_id, int sockfd, int fdmax, int mode, fd_set* fds, char* msg)
+void	send_to_chan(int sender, int sender_id, int sockfd, int fdmax, fd_set* fds, int mode, char* str)
 {
-	char	prefixe[64];
-
+	char	prefixe[50];
 	if (mode == 1)
 		sprintf(prefixe, "server: client %d just arrived\n", sender_id);
 	if (mode == 2)
@@ -35,8 +34,8 @@ void	send_to_chan(int sender, int sender_id, int sockfd, int fdmax, int mode, fd
 		if (i != sender && i != sockfd && FD_ISSET(i, fds) != 0)
 		{
 			send(i, prefixe, strlen(prefixe), 0);
-			if (strlen(msg) > 0)
-				send(i, msg, strlen(msg), 0);
+			if (strlen(str) > 0)
+				send(i, str, strlen(str), 0);
 		}
 	}
 }
@@ -92,14 +91,14 @@ char *str_join(char *buf, char *add)
 int main(int ac, char** av) {
 	if (ac < 2)
 		ft_error("Wrong number of arguments\n");
-	int sockfd, connfd;
-	socklen_t	len;
-	struct sockaddr_in servaddr, cli; 
 	int	fdmax;
 	int	id_client = 0;
 	fd_set	fds;
 	fd_set	fds_copy;
 	t_client	clients[100000];
+	int sockfd, connfd;
+	socklen_t	len;
+	struct sockaddr_in servaddr, cli; 
 
 	// socket create and verification 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0); 
@@ -125,6 +124,7 @@ int main(int ac, char** av) {
 		fds_copy = fds;
 		if (select(fdmax + 1, &fds_copy, NULL, NULL, NULL) == -1)
 			ft_error("Fatal error\n");
+
 		for (int i = 0; i <= fdmax; ++i)
 		{
 			if (FD_ISSET(i, &fds_copy) == 0)
@@ -140,26 +140,26 @@ int main(int ac, char** av) {
 				clients[connfd].id = id_client++;
 				clients[connfd].msg = NULL;
 				FD_SET(connfd, &fds);
-				send_to_chan(connfd, clients[connfd].id, sockfd, fdmax, 1, &fds, "");
+				send_to_chan(connfd, clients[connfd].id, sockfd, fdmax, &fds, 1, "");
 				break;
 			}
 			else
 			{
-				char	buf[32];
-				bzero(&buf, sizeof(char) * 32);
-				if (recv(i, buf, 31, 0) < 1)
+				char	buf[256];
+				bzero(&buf, sizeof(char) * 256);
+				if (recv(i, buf, 255, 0) < 1)
 				{
+					send_to_chan(i, clients[i].id, sockfd, fdmax, &fds, 3, "");
 					FD_CLR(i, &fds);
-					send_to_chan(i, clients[i].id, sockfd, fdmax, 3, &fds, "");
-					close(i);
 				}
 				else
 				{
 					char*	msg;
 					clients[i].msg = str_join(clients[i].msg, buf);
-					while(extract_message(&clients[i].msg, &msg) == 1)
+
+					while (extract_message(&clients[i].msg, &msg) == 1)
 					{
-						send_to_chan(i, clients[i].id, sockfd, fdmax, 2, &fds, msg);
+						send_to_chan(i, clients[connfd].id, sockfd, fdmax, &fds, 2, msg);
 						free(msg);
 						msg = NULL;
 					}
@@ -168,7 +168,7 @@ int main(int ac, char** av) {
 					if (strlen(clients[i].msg) == 0)
 					{
 						free(clients[i].msg);
-						clients[i].msg= NULL;
+						clients[i].msg = NULL;
 					}
 				}
 			}
