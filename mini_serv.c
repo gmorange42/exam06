@@ -21,23 +21,19 @@ void	ft_error(char* str)
 
 void	send_to_chan(int sender, int sender_id, int sockfd, int fdmax, int mode, fd_set* fds, char* msg)
 {
-	char	prefixe[64];
+	char	str[64 + strlen(msg)];
 
 	if (mode == 1)
-		sprintf(prefixe, "server: client %d just arrived\n", sender_id);
+		sprintf(str, "server: client %d just arrived\n", sender_id);
 	if (mode == 2)
-		sprintf(prefixe, "client %d: ", sender_id);
+		sprintf(str, "client %d: %s", sender_id, msg);
 	if (mode == 3)
-		sprintf(prefixe, "server: client %d just left\n", sender_id);
+		sprintf(str, "server: client %d just left\n", sender_id);
 
 	for (int i = 0; i <= fdmax; ++i)
 	{
-		if (i != sender && i != sockfd && FD_ISSET(i, fds) != 0)
-		{
-			send(i, prefixe, strlen(prefixe), 0);
-			if (strlen(msg) > 0)
-				send(i, msg, strlen(msg), 0);
-		}
+		if (i != sender && i != sockfd && FD_ISSET(i, fds ) != 0)
+			send(i, str, strlen(str), 0);
 	}
 }
 
@@ -96,10 +92,10 @@ int main(int ac, char** av) {
 	socklen_t	len;
 	struct sockaddr_in servaddr, cli; 
 	int	fdmax;
-	int	id_client = 0;
+	int	client_id = 0;
 	fd_set	fds;
 	fd_set	fds_copy;
-	t_client	clients[100000];
+	t_client	clients[10000];
 
 	// socket create and verification 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0); 
@@ -137,7 +133,7 @@ int main(int ac, char** av) {
 					ft_error("Fatal error\n");
 				if (fdmax < connfd)
 					fdmax = connfd;
-				clients[connfd].id = id_client++;
+				clients[connfd].id = client_id++;
 				clients[connfd].msg = NULL;
 				FD_SET(connfd, &fds);
 				send_to_chan(connfd, clients[connfd].id, sockfd, fdmax, 1, &fds, "");
@@ -146,18 +142,21 @@ int main(int ac, char** av) {
 			else
 			{
 				char	buf[32];
+
 				bzero(&buf, sizeof(char) * 32);
+
 				if (recv(i, buf, 31, 0) < 1)
 				{
-					FD_CLR(i, &fds);
 					send_to_chan(i, clients[i].id, sockfd, fdmax, 3, &fds, "");
 					close(i);
+					FD_CLR(i, &fds);
 				}
 				else
 				{
 					char*	msg;
+
 					clients[i].msg = str_join(clients[i].msg, buf);
-					while(extract_message(&clients[i].msg, &msg) == 1)
+					while (extract_message(&clients[i].msg, &msg) == 1)
 					{
 						send_to_chan(i, clients[i].id, sockfd, fdmax, 2, &fds, msg);
 						free(msg);
@@ -168,7 +167,7 @@ int main(int ac, char** av) {
 					if (strlen(clients[i].msg) == 0)
 					{
 						free(clients[i].msg);
-						clients[i].msg= NULL;
+						clients[i].msg = NULL;
 					}
 				}
 			}
